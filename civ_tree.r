@@ -29,7 +29,17 @@ parse_rules = function(){
     # pick columns of interest:
     # Name, Prerequisite 1 and 2, and Code
     tech = tech[c(1, 4:5, 8)] |> setNames(c("Name", "Pr1", "Pr2", "Code"))
+
+    # add class so we can use nicer print method
+    class(tech) = c("civ2tech", class(tech))
+
     tech
+    }
+
+
+print.civ2tech = function(x){
+    x = x[names(x) != "Required"]
+    NextMethod(x)
     }
 
 
@@ -37,12 +47,14 @@ get_node = function(x, tech){
     which(x == tech$Code)
     }
 
+
 get_node_parents = function(node, tech){
     c(
         which(tech[node, "Pr1"] == tech$Code),
         which(tech[node, "Pr2"] == tech$Code)
         )
     }
+
 
 # rank of techs without prerequisites is 0
 # rank of other nodes is max rank of prerequisites + 1
@@ -72,36 +84,46 @@ add_rank = function(tech){
 
 na.rm = function(x) x[!is.na(x)]
 
-add_count = function(tech){
-    add_node_count = function(node, tech){
-        if(is.null(tech[node, "Count"][[1]])){
+
+add_required = function(tech){
+    add_node_required = function(node, tech){
+        if(is.null(tech[node, "Required"][[1]])){
             parents = get_node_parents(node, tech)
             for(parent in parents){
-                tech = add_node_count(parent, tech)
+                tech = add_node_required(parent, tech)
                 }
-            tmp = c(unlist(tech[parents, "Count"]), parents) |> unique()
-            tech[node, "Count"] = list(list(tmp))
+            tmp = c(unlist(tech[parents, "Required"]), parents) |> unique()
+            tech[node, "Required"] = list(list(tmp))
             }
 
         tech
         }
 
-    tech$Count = lapply(1:nrow(tech), \(x) NULL)
-    tech$Count[is.na(tech$Pr1) & is.na(tech$Pr2)] = lapply(
-        tech$Count[is.na(tech$Pr1) & is.na(tech$Pr2)], \(x) list()
+    tech$Required = lapply(1:nrow(tech), \(x) NULL)
+    tech$Required[is.na(tech$Pr1) & is.na(tech$Pr2)] = lapply(
+        tech$Required[is.na(tech$Pr1) & is.na(tech$Pr2)], \(x) list()
         )
 
     for(i in seq_len(nrow(tech))){
-        tech = add_node_count(i, tech)
+        tech = add_node_required(i, tech)
         }
 
-    tech$Count = sapply(tech$Count, \(x) x |> unique() |> length())
+    tech
+    }
+
+
+add_count = function(tech){
+    if(!hasName(tech, "Required"))
+        tech = add_required(tech)
+
+    tech$Count = sapply(tech$Required, \(x) x |> unique() |> length())
     tech
     }
 
 
 tech = parse_rules()
 tech = add_rank(tech)
+tech = add_required(tech)
 tech = add_count(tech)
 tech = tech[order(tech$Rank, tech$Count),]
 rownames(tech) = NULL
