@@ -43,16 +43,18 @@ print.civ2tech = function(x){
     }
 
 
-get_node = function(x, tech){
-    which(x == tech$Code)
+get_nodes = function(nodes, tech, where = c("Code", "Name")){
+    if(is.numeric(nodes))
+        return(nodes)
+    where = match.arg(where)
+    match(nodes, tech[[where]])
     }
 
-
 get_node_parents = function(node, tech){
-    c(
-        which(tech[node, "Pr1"] == tech$Code),
-        which(tech[node, "Pr2"] == tech$Code)
-        )
+    if(is.character(node))
+        node = get_nodes(node, tech)
+
+    tech[node, c("Pr1", "Pr2")] |> as.character() |> na.rm()
     }
 
 
@@ -60,8 +62,10 @@ get_node_parents = function(node, tech){
 # rank of other nodes is max rank of prerequisites + 1
 add_rank = function(tech){
     add_node_rank = function(node, tech){
+        if(is.character(node))
+            node = get_nodes(node, tech)
         if(is.na(tech[node, "Rank"])){
-            parents = get_node_parents(node, tech)
+            parents = get_node_parents(node, tech) |> get_nodes(tech)
             for(parent in parents){
                 tech = add_node_rank(parent, tech)
                 }
@@ -74,8 +78,8 @@ add_rank = function(tech){
     tech$Rank = NA_integer_
     tech$Rank[is.na(tech$Pr1) & is.na(tech$Pr2)] = 0L
 
-    for(i in seq_len(nrow(tech))){
-        tech = add_node_rank(i, tech)
+    for(node in tech$Code){
+        tech = add_node_rank(node, tech)
         }
 
     tech
@@ -87,12 +91,16 @@ na.rm = function(x) x[!is.na(x)]
 
 add_required = function(tech){
     add_node_required = function(node, tech){
+        if(is.character(node))
+            node = get_nodes(node, tech)
+
         if(is.null(tech[node, "Required"][[1]])){
             parents = get_node_parents(node, tech)
+            parents_pos = get_nodes(parents, tech)
             for(parent in parents){
                 tech = add_node_required(parent, tech)
                 }
-            tmp = c(unlist(tech[parents, "Required"]), parents) |> unique()
+            tmp = c(unlist(tech[parents_pos, "Required"]), parents) |> unique()
             tech[node, "Required"] = list(list(tmp))
             }
 
@@ -104,13 +112,24 @@ add_required = function(tech){
         tech$Required[is.na(tech$Pr1) & is.na(tech$Pr2)], \(x) list()
         )
 
-    for(i in seq_len(nrow(tech))){
-        tech = add_node_required(i, tech)
+
+    for(node in tech$Code){
+        tech = add_node_required(node, tech)
         }
 
     tech
     }
 
+
+get_required = function(x, tech, translate = TRUE){
+    node = c(get_nodes(x, tech, "Code"), get_nodes(x, tech, "Name")) |> na.rm()
+
+    required = tech[node, "Required"][[1]]
+    if(translate)
+        required = tech[get_nodes(required, tech), "Name"]
+
+    required
+    }
 
 add_count = function(tech){
     if(!hasName(tech, "Required"))
